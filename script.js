@@ -55,7 +55,10 @@
 
   const formatMoney = (amount) => {
     const cfg = CURRENCIES[currency] ?? CURRENCIES.CLP;
-    const formatted = Number(amount).toLocaleString(cfg.locale, {
+    // Blindaje: cualquier valor no finito (NaN, undefined, null) se muestra como 0.
+    const numeric = Number(amount);
+    const safeAmount = Number.isFinite(numeric) ? numeric : 0;
+    const formatted = safeAmount.toLocaleString(cfg.locale, {
       minimumFractionDigits: cfg.decimals,
       maximumFractionDigits: cfg.decimals,
     });
@@ -232,14 +235,20 @@
   const buildBreakdown = (expenses) => {
     const totalsByCategory = Object.fromEntries(CATEGORIES.map((c) => [c, 0]));
     for (const exp of expenses) {
-      totalsByCategory[exp.category] += exp.amount;
+      // Ignora categorías desconocidas y montos no numéricos para no propagar NaN.
+      if (!(exp.category in totalsByCategory)) continue;
+      const amount = Number.isFinite(exp.amount) ? exp.amount : 0;
+      totalsByCategory[exp.category] += amount;
     }
     return totalsByCategory;
   };
 
   const render = () => {
     const expenses = getFilteredExpenses();
-    const totalSpent = expenses.reduce((acc, x) => acc + x.amount, 0);
+    const totalSpent = expenses.reduce(
+      (acc, x) => acc + (Number.isFinite(x.amount) ? x.amount : 0),
+      0
+    );
     totalSpentEl.textContent = formatMoney(totalSpent);
 
     const totalsByCategory = buildBreakdown(expenses);
@@ -247,8 +256,9 @@
 
     breakdownEl.innerHTML = "";
     for (const category of CATEGORIES) {
-      const categoryTotal = totalsByCategory[category] ?? 0;
-      const pct = Math.round((categoryTotal / total) * 100);
+      const rawCategoryTotal = totalsByCategory[category];
+      const categoryTotal = Number.isFinite(rawCategoryTotal) ? rawCategoryTotal : 0;
+      const pct = total > 0 ? Math.round((categoryTotal / total) * 100) : 0;
 
       const card = document.createElement("div");
       card.className = "rounded-lg border border-slate-200 bg-white p-3";
